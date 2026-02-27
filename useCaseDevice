@@ -1,0 +1,107 @@
+package com.cybershield.protection.core.usecase;
+
+import com.cybershield.protection.core.domain.CompliancePolicy;
+import com.cybershield.protection.core.domain.Device;
+import com.cybershield.protection.core.domain.type.DeviceType;
+import com.cybershield.protection.core.domain.type.OsType;
+import com.cybershield.protection.core.port.in.EnrollDeviceUseCase;
+import com.cybershield.protection.core.port.in.RecordNetworkTrafficUseCase;
+import com.cybershield.protection.core.port.out.DeviceRepository;
+import com.cybershield.protection.core.port.out.event.DeviceEventPublisher;
+import jakarta.transaction.Transactional;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+// Service d'enregistrement des appareils qui gère l'enrollment, le blocage et le déblocage des appareils
+public class EnrollDeviceService implements EnrollDeviceUseCase {
+
+    private final DeviceRepository deviceRepository;
+    private final DeviceEventPublisher eventPublisher;
+
+    // Le moteur UEBA injecté pour le fingerprinting et l'analyse comportementale des appareils en fonction de leur trafic réseau
+    private final RecordNetworkTrafficUseCase networkTrafficUseCase;
+
+    public EnrollDeviceService(DeviceRepository deviceRepository,
+                               DeviceEventPublisher eventPublisher,
+                               RecordNetworkTrafficUseCase networkTrafficUseCase) {
+        this.deviceRepository = deviceRepository;
+        this.eventPublisher = eventPublisher;
+        this.networkTrafficUseCase = networkTrafficUseCase;
+    }
+
+    // Lorsqu'un appareil s'enregistre, on effectue d'abord une vérification de conformité basée sur les politiques de sécurité définies
+    @Override
+    @Transactional
+    public Device enroll(String macAddress, String ipAddress, DeviceType type,
+                         OsType osType, String osVersion, String hostname,
+                         String vendor, Integer ttl, String openPorts,
+                         Double bytesSent, Double bytesReceived) {
+
+
+        // COMPLIANCE CHECK
+        if (osType == OsType.UNKNOWN) {
+            throw new CompliancePolicy.ComplianceException("L'appareil ne respecte pas la politique de sécurité (OS Inconnu).");
+        }
+
+
+        // ENROLLMENT & UPDATE
+        Optional<Device> existingDevice = deviceRepository.findByMacAddress(macAddress);
+        Device device;
+
+        // Si l'appareil existe déjà, on met à jour ses informations réseau (IP, hostname, vendor, TTL, open ports)
+        if (existingDevice.isPresent()) {
+            device = existingDevice.get();
+            device.updateNetworkInfo(ipAddress, hostname, vendor, ttl, openPorts);
+        } else {
+            device = new Device(UUID.randomUUID(), macAddress, ipAddress, type,
+                    osType, osVersion, hostname, vendor, ttl, openPorts);
+        }
+
+        // Sauvegarde
+        Device savedDevice = deviceRepository.save(device);
+
+        if (existingDevice.isEmpty()) {
+            eventPublisher.publishDeviceCreated(savedDevice);
+        }
+
+        // Moteur Ia UEBA : Si l'appareil génère du trafic réseau, on déclenche le fingerprinting
+        if (bytesSent != null && bytesReceived != null && (bytesSent > 0 || bytesReceived > 0)) {
+            networkTrafficUseCase.record(savedDevice.getId(), bytesSent, bytesReceived);
+
+            return deviceRepository.findById(savedDevice.getId()).orElse(savedDevice);
+        }
+
+        return savedDevice;
+    }
+
+    // Lorsqu'un appareil est bloqué, on le marque comme compromis avec un event de quarantaine
+    @Override
+    public void blockDevice(UUID deviceId) {
+        deviceRepository.findById(deviceId).ifPresent(device -> {
+            device.setBlacklisted(true);
+            device.markAsCompromised();
+            deviceRepository.save(device);
+            eventPublisher.publishQuarantineAlert(deviceId, device.getIpAddress(), "ACTION ADMIN", 100.0);
+        });
+    }
+
+    // Lorsqu'un appareil est débloqué, on le marque comme protégé et on publie unévénement de restauration
+    @Override
+    public void unblockDevice(UUID deviceId) {
+        deviceRepository.findById(deviceId).ifPresent(device -> {
+            device.setBlacklisted(false);
+            device.markAsProtected();
+            deviceRepository.save(device);
+
+            eventPublisher.publishDeviceRestored(deviceId, device.getIpAddress());
+        });
+    }
+
+    // Récupérer tous les appareils pour les afficher dans le dashboard de gestion des appareils
+    @Override
+    public List<Device> getAllDevices() {
+        return deviceRepository.findAll();
+    }
+}

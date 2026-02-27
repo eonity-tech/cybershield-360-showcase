@@ -1,0 +1,123 @@
+package com.cybershield.protection.core.usecase;
+
+import com.cybershield.protection.core.domain.CompliancePolicy;
+import com.cybershield.protection.core.domain.Device;
+import com.cybershield.protection.core.domain.type.DeviceType;
+import com.cybershield.protection.core.domain.type.OsType;
+import com.cybershield.protection.core.port.in.RecordNetworkTrafficUseCase;
+import com.cybershield.protection.core.port.out.DeviceRepository;
+import com.cybershield.protection.core.port.out.event.DeviceEventPublisher;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import java.util.Optional;
+import java.util.UUID;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+@ExtendWith(MockitoExtension.class)
+class EnrollDeviceServiceTest {
+
+    @Mock
+    private DeviceRepository deviceRepository;
+
+    @Mock
+    private DeviceEventPublisher eventPublisher;
+
+    @Mock
+    private RecordNetworkTrafficUseCase networkTrafficUseCase;
+
+    private EnrollDeviceService enrollDeviceService;
+
+    @BeforeEach
+    void setUp() {
+        enrollDeviceService = new EnrollDeviceService(deviceRepository, eventPublisher, networkTrafficUseCase);
+    }
+
+    // --- SCÉNARIO 1 : Succès - Enroll et Update ---
+    @Test
+    void shouldEnrollNewDeviceSuccessfully() {
+        // GIVEN
+        String mac = "00:11:22:33:44:55";
+        when(deviceRepository.findByMacAddress(mac)).thenReturn(Optional.empty());
+        when(deviceRepository.save(any(Device.class))).thenAnswer(i -> i.getArgument(0));
+
+        // WHEN
+        Device result = enrollDeviceService.enroll(
+                mac, "192.168.1.10", DeviceType.COMPUTER, OsType.WINDOWS, "11",
+                "My-Host", "Dell", 64, "443",
+                1000.0, 500.0 // Flux initiaux
+        );
+
+        // THEN
+        assertNotNull(result);
+        verify(eventPublisher).publishDeviceCreated(any(Device.class));
+        verify(networkTrafficUseCase).record(eq(result.getId()), eq(1000.0), eq(500.0));
+    }
+
+    // SNÉNARIO 2 : Succès - Mise à jour d'un appareil déjà existant
+    @Test
+    void shouldUpdateDeviceWhenAlreadyExists() {
+        // GIVEN
+        String mac = "AA:BB:CC:DD:EE:FF";
+        UUID existingId = UUID.randomUUID();
+        Device existingDevice = new Device(existingId, mac, "10.0.0.1", DeviceType.SERVER, OsType.LINUX, "v1", "OldHost", "OldVendor", 64, "80");
+
+        when(deviceRepository.findByMacAddress(mac)).thenReturn(Optional.of(existingDevice));
+        when(deviceRepository.save(any(Device.class))).thenAnswer(i -> i.getArgument(0));
+
+        // WHEN : On ajoute les 2 arguments de trafic manquants (0.0, 0.0)
+        Device result = enrollDeviceService.enroll(
+                mac, "192.168.1.99", DeviceType.SERVER, OsType.LINUX, "v1",
+                "NewHost", "NewVendor", 64, "3389",
+                0.0, 0.0
+        );
+
+        // THEN
+        assertEquals(existingId, result.getId());
+        assertEquals("192.168.1.99", result.getIpAddress());
+        assertTrue(result.getSecurityRecommendation().contains("URGENT"));
+        verify(deviceRepository).save(existingDevice);
+    }
+
+    // SCÉNARIO 3 : Échec - Appareil non conforme (OS Inconnu)
+    @Test
+    void shouldRejectNonCompliantDevice() {
+        // GIVEN
+        String mac = "11:22:33:44:55:66";
+
+        // WHEN & THEN : On ajoute les 2 arguments de trafic manquants (0.0, 0.0)
+        assertThrows(CompliancePolicy.ComplianceException.class, () -> {
+            enrollDeviceService.enroll(
+                    mac, "10.0.0.50", DeviceType.IOT, OsType.UNKNOWN,
+                    "Firmware v1", "Unknown-Cam", "NoName", 64, "23",
+                    0.0, 0.0
+            );
+        });
+
+        verifyNoInteractions(deviceRepository);
+    }
+
+    // SCÉNARIO 4 : Succès - Blocage d'un appareil et publication d'une alerte de quarantaine
+    @Test
+    void shouldBlockDeviceAndPublishAlert() {
+        // GIVEN
+        UUID deviceId = UUID.randomUUID();
+        String targetIp = "192.168.1.15"; // On définit l'IP cible
+        Device targetDevice = new Device(deviceId, "00:AA:BB:CC:DD:EE", targetIp, DeviceType.COMPUTER, OsType.WINDOWS, "11", "PC-TARGET", "Dell", 128, "443");
+
+        when(deviceRepository.findById(deviceId)).thenReturn(Optional.of(targetDevice));
+        when(deviceRepository.save(any(Device.class))).thenAnswer(i -> i.getArgument(0));
+
+        // WHEN
+        enrollDeviceService.blockDevice(deviceId);
+
+        // THEN
+        assertTrue(targetDevice.isBlacklisted());
+        verify(deviceRepository).save(targetDevice);
+        verify(eventPublisher).publishQuarantineAlert(eq(deviceId), eq(targetIp), contains("ACTION ADMIN"), eq(100.0));
+    }
+}

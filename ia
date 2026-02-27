@@ -1,0 +1,59 @@
+import socket
+import psutil
+import uuid
+from typing import List
+
+class ScannerComponent:
+    # Ce composant est conçu pour collecter des informations sur le système local
+    @staticmethod
+    def get_local_ip() -> str:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "127.0.0.1"
+
+    # Récupère l'adresse MAC de l'appareil local
+    @staticmethod
+    def get_mac_address() -> str:
+        mac_num = hex(uuid.getnode()).replace('0x', '').upper()
+        mac = '-'.join(mac_num[i: i + 2] for i in range(0, 11, 2))
+        return mac.replace('-', ':')
+
+    # Récupère les ports ouverts sur le système local, 
+    # en filtrant les ports système courants pour éviter le bruit dans les résultats
+    @staticmethod
+    def get_open_ports() -> List[int]:
+        open_ports = set()
+        
+        # PORTS SYSTÈME À IGNORER (Bruit standard OS)
+        # 53: DNS, 631: Impression, 5353: mDNS, 5037: ADB (Android Debug)
+        ignored_ports = {53, 631, 5037, 5353} 
+        
+        try:
+            # Parcours des connexions réseau pour identifier les ports en écoute
+            for conn in psutil.net_connections(kind='inet'):
+                if conn.status == 'LISTEN':
+                    port = conn.laddr.port
+                    
+                    # ignore les ports système courants pour éviter le bruit dans les résultats
+                    if port in ignored_ports:
+                        continue
+                    
+                    # ignore les ports élevés qui sont souvent éphémères ou utilisés par des applications non critiques
+                    if port > 32768:
+                        continue
+                        
+                    open_ports.add(port)
+        except psutil.AccessDenied:
+            # Pour les systèmes où l'accès aux informations de connexion est restreint, on peut ignorer cette étape
+            pass
+            
+        return sorted(list(open_ports))
+
+    @staticmethod
+    def get_vendor() -> str:
+        return "Generic System"

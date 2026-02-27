@@ -1,0 +1,17 @@
+// backend-protection/cybershield-core/src/main/java/com/cybershield/protection/core/port/out/DeviceRepository.java
+
+package com.cybershield.protection.core.port.out;
+
+import com.cybershield.protection.core.domain.Device;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface DeviceRepository {
+
+    Device save(Device device);
+    Optional<Device> findByMacAddress(String macAddress);
+    List<Device> findAll();
+    Optional<Device> findById(UUID id);
+    boolean existsById(UUID id);
+}
