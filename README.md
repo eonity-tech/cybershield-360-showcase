@@ -81,6 +81,22 @@ Cette conception permet une séparation totale entre la logique métier (Core/Do
 
 ![Documentation Swagger](./assets/swagger.png)
 
+### 4. Monitoring & Alerting (Uptime Kuma & Discord)
+
+Pour garantir la haute disponibilité de cette architecture microservices complexe, une stack de monitoring en temps réel a été mise en place avec **Uptime Kuma**. 
+
+Il scrute en permanence l'état de santé (Healthchecks) des nœuds critiques de l'infrastructure :
+- Les services de routage et découverte (Gateway, Eureka).
+- La gestion des identités (Keycloak).
+- Les bases de données et brokers d'événements (PostgreSQL, Redis).
+- Les microservices métiers (Backend Protection, Subscription).
+
+![Monitoring Uptime Kuma](./assets/uptimeKuma.png)
+
+**Alerting en temps réel (Discord) :** Le système de monitoring est couplé à un Webhook Discord. En cas de chute d'un service critique ou de retour à la normale (ex: *Cybershield Subscription is up!*), une notification automatique est instantanément envoyée sur le canal `#alertes-serveur` de l'équipe technique pour une réactivité maximale.
+
+![Alerte Discord](./assets/discord.png)
+
 ## 4. Qualité du Code & Tests Automatisés
 
 La fiabilité étant un enjeu critique pour une plateforme de cybersécurité, le backend Spring Boot est couvert par une stratégie de tests rigoureuse garantissant la non-régression du code :
