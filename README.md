@@ -34,7 +34,7 @@ Le dashboard permet de visualiser en temps réel l'état des machines (OS, IP, P
 
 Moteur de classification interactif des menaces et normes cyber (Legal, Critical Threats, Identity & Access...) basé sur une base de données de conformité dynamique.
 
-![Catégories Cyber](./assets/categories.png)
+![Catégories Cyber](./assets/devices.png)
 
 ### Storybook (Atelier de développement front)
 
