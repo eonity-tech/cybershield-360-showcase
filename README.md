@@ -28,7 +28,7 @@ Développé en **React avec la méthode Atomic Design** et documenté via **Stor
 
 Le dashboard permet de visualiser en temps réel l'état des machines (OS, IP, Ports ouverts) et d'appliquer une isolation réseau immédiate en cas de compromission (Bouton "Bloquer").
 
-![Dashboard EDR](./assets/dashboard.png)
+![Dashboard EDR](./assets/tableau.png)
 
 ### Classification des Menaces (Threat Intelligence)
 
