@@ -116,6 +116,20 @@ Pour avoir un aperçu de mes standards de code (Clean Code, Typage, SOLID), voic
 - **[Voir un Composant React (Atomic Design)](composant)**
 - **[Voir le scan de l'Agent Python](ia)**
 
+## 5. État d'avancement de la R&D : V1 en cours de déploiement
+
+Le développement de la version 1.0 de **NEXUS** suit son cycle d'étude avec la validation de jalons techniques majeurs.
+
+- **Analyse de surface et Cartographie** : Le moteur identifie le parc en temps réel, classifie les terminaux par OS et évalue le risque via les flux et ports ouverts.
+- **Recherche IA Profonde** : Une intelligence artificielle locale analyse les comportements suspects en profondeur pour détecter les malwares complexes et alerter le RSSI.
+- **Réponse Active (Kill Switch)** : Capacité d'isolation immédiate de l'hôte compromis directement depuis l'interface pour stopper toute propagation.
+
+![Vue globale du parc informatique](./assets/appareils2.png)
+
+![Alerte d'isolement immédiat](./assets/trafics2.png)
+
+![Tableau de bord et menaces IA](./assets/tableau_de_bord2.png)
+
 ---
 
 ### Prêt pour une démo ?
